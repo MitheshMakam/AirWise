@@ -1,0 +1,15 @@
+# Python backend
+backend/venv/
+backend/__pycache__/
+backend/.env
+*.pyc
+
+# Node / Next.js frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/.env
+
+# OS junk
+.DS_Store
+Thumbs.db
