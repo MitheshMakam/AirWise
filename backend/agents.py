@@ -127,40 +127,51 @@ class DataAgent:
 
         return self._parse_feed(geo_data, lat, lon)
 
-    def fetch_weather(self, lat: float, lon: float) -> dict:
-        resp = requests.get(
-            WEATHER_URL,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "current_weather": True,
-                "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m",
-                "forecast_days": 1,
-                "timezone": "auto",
-            },
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            raise RuntimeError("Weather service unavailable.")
-        d = resp.json()
-        current = d.get("current_weather", {})
-        hourly = d.get("hourly", {})
-        times = hourly.get("time", [])
-        temps = hourly.get("temperature_2m", [])
-        humidity = hourly.get("relative_humidity_2m", [])
-        wind = hourly.get("wind_speed_10m", [])
-        outlook = [
-            {"time": t, "temperature_c": temps[i], "humidity_pct": humidity[i], "wind_kmh": wind[i]}
-            for i, t in enumerate(times)
-        ]
-        return {
-            "current": {
-                "temperature_c": current.get("temperature"),
-                "wind_kmh": current.get("windspeed"),
-            },
-            "hourly_outlook": outlook,
-        }
+def fetch_weather(self, lat: float, lon: float) -> dict:
+    resp = requests.get(
+        WEATHER_URL,
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,wind_speed_10m",
+            "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m",
+            "forecast_days": 1,
+            "timezone": "auto",
+        },
+        timeout=10,
+    )
 
+    if resp.status_code != 200:
+        print("Open-Meteo error:", resp.status_code, resp.text)
+        raise RuntimeError("Weather service unavailable.")
+
+    d = resp.json()
+
+    current = d.get("current", {})
+    hourly = d.get("hourly", {})
+
+    times = hourly.get("time", [])
+    temps = hourly.get("temperature_2m", [])
+    humidity = hourly.get("relative_humidity_2m", [])
+    wind = hourly.get("wind_speed_10m", [])
+
+    outlook = [
+        {
+            "time": t,
+            "temperature_c": temps[i],
+            "humidity_pct": humidity[i],
+            "wind_kmh": wind[i],
+        }
+        for i, t in enumerate(times)
+    ]
+
+    return {
+        "current": {
+            "temperature_c": current.get("temperature_2m"),
+            "wind_kmh": current.get("wind_speed_10m"),
+        },
+        "hourly_outlook": outlook,
+    }
 
 class HealthAgent:
     """Maps AQI + sensitivity group to a WHO/CPCB-aligned health assessment."""
