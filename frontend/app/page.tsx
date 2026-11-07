@@ -172,7 +172,7 @@ export default function Home() {
             <div className="weather-row">
               <span>{data.weather.temperature_c == null ? "Weather unavailable" : `Currently ${data.weather.temperature_c}°C`}</span>
               <span>{data.weather.wind_kmh == null ? "" : `Wind ${data.weather.wind_kmh} km/h`}</span>
-              <span>Station: {data.aqi.station}</span>
+              <span>Source: {data.aqi.station}</span>
             </div>
 
             <footer className="responsible-note">{data.responsible_ai_note}</footer>

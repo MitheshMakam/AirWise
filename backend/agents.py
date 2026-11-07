@@ -1,6 +1,7 @@
 import os
 import math
 import requests
+from datetime import datetime, timedelta, timezone
 
 WAQI_TOKEN = os.getenv("WAQI_TOKEN", "demo")  # get a free token: https://aqicn.org/data-platform/token/
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -78,6 +79,45 @@ class DataAgent:
             "station_distance_km": distance_km,
         }
 
+    def _fetch_open_meteo_aqi(self, lat: float, lon: float) -> dict:
+        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        try:
+            resp = requests.get(
+                url,
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "current": "us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,ozone",
+                    "timezone": "auto",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            current = resp.json().get("current", {})
+        except (requests.RequestException, ValueError) as exc:
+            print("Open-Meteo air-quality request failed:", exc)
+            raise RuntimeError("Current air-quality data is temporarily unavailable. Please try again shortly.") from exc
+
+        aqi = current.get("us_aqi")
+        if aqi is None:
+            raise RuntimeError("Current air-quality data is temporarily unavailable. Please try again shortly.")
+
+        pollutants = {
+            "pm25": current.get("pm2_5"),
+            "pm10": current.get("pm10"),
+            "co": current.get("carbon_monoxide"),
+            "no2": current.get("nitrogen_dioxide"),
+            "o3": current.get("ozone"),
+        }
+        return {
+            "aqi": round(aqi),
+            "dominant_pollutant": None,
+            "pollutants": {key: value for key, value in pollutants.items() if value is not None},
+            "station": "Open-Meteo modeled estimate (not a monitoring station)",
+            "measured_at": current.get("time"),
+            "station_distance_km": None,
+        }
+
     def _search_nearest_station(self, keyword: str, lat: float, lon: float):
         resp = requests.get(WAQI_SEARCH_URL, params={"token": WAQI_TOKEN, "keyword": keyword}, timeout=10)
         if resp.status_code != 200:
@@ -103,29 +143,37 @@ class DataAgent:
         return payload["data"]
 
     def fetch_aqi(self, lat: float, lon: float, keyword: str = "") -> dict:
-        # 1. Try WAQI's nearest-station-by-coordinates lookup first.
-        resp = requests.get(WAQI_GEO_URL.format(lat=lat, lon=lon), params={"token": WAQI_TOKEN}, timeout=10)
-        geo_data = None
-        if resp.status_code == 200 and resp.json().get("status") == "ok":
-            candidate = resp.json()["data"]
-            station_geo = candidate.get("city", {}).get("geo")
-            if station_geo:
-                dist = self._haversine_km(lat, lon, station_geo[0], station_geo[1])
-                if dist <= MAX_PLAUSIBLE_STATION_KM:
-                    geo_data = candidate
+        try:
+            resp = requests.get(WAQI_GEO_URL.format(lat=lat, lon=lon), params={"token": WAQI_TOKEN}, timeout=10)
+            geo_data = None
+            if resp.status_code == 200 and resp.json().get("status") == "ok":
+                candidate = resp.json()["data"]
+                station_geo = candidate.get("city", {}).get("geo")
+                if station_geo:
+                    dist = self._haversine_km(lat, lon, station_geo[0], station_geo[1])
+                    if dist <= MAX_PLAUSIBLE_STATION_KM:
+                        geo_data = candidate
 
-        # 2. If that failed or returned an implausibly distant station, fall
-        #    back to a keyword search and pick the closest real match.
-        if geo_data is None and keyword:
-            geo_data = self._search_nearest_station(keyword, lat, lon)
+            if geo_data is None and keyword:
+                geo_data = self._search_nearest_station(keyword, lat, lon)
 
-        if geo_data is None:
-            raise RuntimeError(
-                "No nearby AQI monitoring station could be found for this location. "
-                "Try a larger nearby city instead."
-            )
+            if geo_data is not None:
+                result = self._parse_feed(geo_data, lat, lon)
+                measured_at = result.get("measured_at")
+                try:
+                    measured_time = datetime.fromisoformat(measured_at.replace("Z", "+00:00"))
+                    if measured_time.tzinfo is None:
+                        measured_time = measured_time.replace(tzinfo=timezone.utc)
+                    stale = datetime.now(timezone.utc) - measured_time > timedelta(hours=6)
+                except (AttributeError, TypeError, ValueError):
+                    stale = True
+                if not stale:
+                    return result
+                print("WAQI reading is older than six hours; using the current modeled estimate.")
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            print("WAQI request failed; trying Open-Meteo air quality:", exc)
 
-        return self._parse_feed(geo_data, lat, lon)
+        return self._fetch_open_meteo_aqi(lat, lon)
 
     def fetch_weather(self, lat: float, lon: float) -> dict:
         unavailable = {
