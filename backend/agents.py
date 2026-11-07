@@ -40,6 +40,25 @@ class DataAgent:
     """Fetches and normalizes location, AQI, and weather data."""
 
     def geocode(self, location: str) -> dict:
+        # The browser's geolocation flow sends "latitude,longitude" rather
+        # than a place name. Accept that directly instead of passing it to the
+        # city-name geocoder, which returns no results for coordinates.
+        try:
+            coordinates = [float(part.strip()) for part in location.split(",")]
+        except (TypeError, ValueError):
+            coordinates = []
+        if len(coordinates) == 2:
+            latitude, longitude = coordinates
+            if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                return {
+                    "name": "Your location",
+                    "admin1": "",
+                    "country": "",
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "timezone": "auto",
+                }
+
         resp = requests.get(GEOCODE_URL, params={"name": location, "count": 1}, timeout=10)
         if resp.status_code != 200:
             raise RuntimeError("Geocoding service unavailable.")
