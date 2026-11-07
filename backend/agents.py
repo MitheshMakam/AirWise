@@ -152,7 +152,9 @@ class DataAgent:
         if not candidates:
             return None
         candidates.sort(key=lambda c: c[0])
-        best_uid = candidates[0][1]
+        best_distance, best_uid = candidates[0]
+        if best_distance > MAX_PLAUSIBLE_STATION_KM:
+            return None
         station_resp = requests.get(WAQI_STATION_URL.format(uid=best_uid), params={"token": WAQI_TOKEN}, timeout=10)
         if station_resp.status_code != 200:
             return None
