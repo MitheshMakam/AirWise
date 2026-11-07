@@ -53,6 +53,9 @@ export default function Home() {
         throw new Error(body.detail || "Couldn't fetch that location. Try a nearby city name.");
       }
       const json = await res.json();
+      if (!json?.health?.category || !json?.aqi || !json?.location) {
+        throw new Error("The air-quality service returned an incomplete response. Please try again.");
+      }
       setData(json);
     } catch (e: any) {
       setError(e.message || "Something went wrong.");
@@ -75,10 +78,17 @@ export default function Home() {
           const res = await fetch(
             `${API_URL}/api/advisory?location=${latitude},${longitude}&group=${group}`
           );
-          const json = await res.json();
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(json.detail || "Couldn't read your location's air quality. Please try again.");
+          }
+          if (!json?.health?.category || !json?.aqi || !json?.location) {
+            throw new Error("The air-quality service returned an incomplete response. Please try again.");
+          }
           setData(json);
-        } catch {
-          setError("Couldn't read your location's air quality.");
+        } catch (e: any) {
+          setData(null);
+          setError(e.message || "Couldn't read your location's air quality.");
         } finally {
           setLoading(false);
         }
