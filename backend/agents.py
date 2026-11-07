@@ -1,4 +1,4 @@
-﻿import os
+import os
 import math
 import requests
 
@@ -128,24 +128,36 @@ class DataAgent:
         return self._parse_feed(geo_data, lat, lon)
 
     def fetch_weather(self, lat: float, lon: float) -> dict:
-        resp = requests.get(
-            WEATHER_URL,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "current": "temperature_2m,wind_speed_10m",
-                "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m",
-                "forecast_days": 1,
-                "timezone": "auto",
-            },
-            timeout=10,
-        )
+        unavailable = {
+            "current": {"temperature_c": None, "wind_kmh": None},
+            "hourly_outlook": [],
+        }
+        try:
+            resp = requests.get(
+                WEATHER_URL,
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "current": "temperature_2m,wind_speed_10m",
+                    "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m",
+                    "forecast_days": 1,
+                    "timezone": "auto",
+                },
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            print("Open-Meteo request failed:", exc)
+            return unavailable
 
         if resp.status_code != 200:
             print("Open-Meteo error:", resp.status_code, resp.text)
-            raise RuntimeError("Weather service unavailable.")
+            return unavailable
 
-        d = resp.json()
+        try:
+            d = resp.json()
+        except ValueError as exc:
+            print("Open-Meteo returned invalid JSON:", exc)
+            return unavailable
 
         current = d.get("current", {})
         hourly = d.get("hourly", {})
@@ -263,5 +275,3 @@ class AdvisoryAgent:
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
-
-

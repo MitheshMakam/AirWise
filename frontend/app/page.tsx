@@ -24,7 +24,7 @@ const BAND_COLOR: Record<string, string> = {
 type Advisory = {
   location: { name: string; admin1: string; country: string };
   aqi: { aqi: number; dominant_pollutant: string; pollutants: Record<string, number>; station: string; measured_at: string };
-  weather: { temperature_c: number; wind_kmh: number };
+  weather: { temperature_c: number | null; wind_kmh: number | null };
   hourly_outlook: { time: string; temperature_c: number; humidity_pct: number; wind_kmh: number }[];
   health: { category: string; base_guidance: string; group: string; extra_caution_flag: boolean };
   advisory: string;
@@ -170,8 +170,8 @@ export default function Home() {
             </div>
 
             <div className="weather-row">
-              <span>Currently {data.weather.temperature_c}°C</span>
-              <span>Wind {data.weather.wind_kmh} km/h</span>
+              <span>{data.weather.temperature_c == null ? "Weather unavailable" : `Currently ${data.weather.temperature_c}°C`}</span>
+              <span>{data.weather.wind_kmh == null ? "" : `Wind ${data.weather.wind_kmh} km/h`}</span>
               <span>Station: {data.aqi.station}</span>
             </div>
 
